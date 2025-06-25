@@ -49,8 +49,8 @@ export const Scripts = () => {
     scene.add(vehicleMesh);
 
     // ! Adding YUKA Vehicle - Connecting body (mesh) and mind (YUKA)
-    const vehicle = new YUKA.Vehicle();
-    vehicle.setRenderComponent(vehicleMesh, sync);
+    //const vehicle = new YUKA.Vehicle();
+    //vehicle.setRenderComponent(vehicleMesh, sync);
 
     function sync(entity: any, renderComponent: any) {
       renderComponent.matrix.copy(entity.worldMatrix);
@@ -58,7 +58,7 @@ export const Scripts = () => {
 
     // Function necessary to keep track of entities
     const entityManager = new YUKA.EntityManager();
-    entityManager.add(vehicle);
+    //entityManager.add(vehicle);
 
     // Adding our factory floor
     const loader = new GLTFLoader();
@@ -68,42 +68,46 @@ export const Scripts = () => {
     });
 
     // ! Creating a path entity to follow in YUKA
-    const path = new YUKA.Path();
-    path.add(new YUKA.Vector3(0, 0, 0));
-    path.add(new YUKA.Vector3(-3, 0, 0));
-    path.add(new YUKA.Vector3(-3, 0, -3));
+    // const path = new YUKA.Path();
+    // path.add(new YUKA.Vector3(0, 0, 0));
+    // path.add(new YUKA.Vector3(-3, 0, 0));
+    // path.add(new YUKA.Vector3(-3, 0, -3));
 
-    path.loop = true;
+    // path.loop = true;
 
     // Spawn Vehicle at first checkpoint
-    vehicle.position.copy(path.current());
+    //vehicle.position.copy(path.current());
 
     // make vehicle move
-    const followPathBehavior = new YUKA.FollowPathBehavior(path, 1);
-    vehicle.steering.add(followPathBehavior);
+    // const followPathBehavior = new YUKA.FollowPathBehavior(path, 1);
+    //vehicle.steering.add(followPathBehavior);
+
+    const followPathBehavior = new YUKA.FollowPathBehavior(); // (path, destination tolerance)
+    followPathBehavior.active = false; // disables/enables default FollowPathBehavior
+    followPathBehavior.nextWaypointDistance = 0.5;
 
     // More control of behavior
-    const onPathBehavior = new YUKA.OnPathBehavior(path, 3);
-    vehicle.steering.add(onPathBehavior);
+    // const onPathBehavior = new YUKA.OnPathBehavior(path, 3);
+    //vehicle.steering.add(onPathBehavior);
 
     // ! Creating Visual Path
-    const visualPath = [];
-    for (let i = 0; i < path._waypoints.length; i++) {
-      const waypoint = path._waypoints[i];
-      visualPath.push(waypoint.x, waypoint.y, waypoint.z);
-    }
+    // const visualPath = [];
+    // for (let i = 0; i < path._waypoints.length; i++) {
+    //   const waypoint = path._waypoints[i];
+    //   visualPath.push(waypoint.x, waypoint.y, waypoint.z);
+    // }
 
     // Creating a buffer geometry instance (clay that can form whatever we like)
-    const lineGeometry = new THREE.BufferGeometry();
-    lineGeometry.setAttribute(
-      "position",
-      new THREE.Float32BufferAttribute(visualPath, 3) // takes position and passes to GPU w/ 3 elements at a time
-    );
+    // const lineGeometry = new THREE.BufferGeometry();
+    // lineGeometry.setAttribute(
+    //   "position",
+    //   new THREE.Float32BufferAttribute(visualPath, 3) // takes position and passes to GPU w/ 3 elements at a time
+    // );
 
     // Linking points with lines -> Link line -> geometry -> add to scene
-    const lineMaterial = new THREE.LineBasicMaterial({ color: 0xffffff });
-    const lines = new THREE.LineLoop(lineGeometry, lineMaterial);
-    scene.add(lines);
+    //const lineMaterial = new THREE.LineBasicMaterial({ color: 0xffffff });
+    //const lines = new THREE.LineLoop(lineGeometry, lineMaterial);
+    //scene.add(lines);
 
     // ! Creating nav mesh for unit collision
     const navmeshLoader = new YUKA.NavMeshLoader();
@@ -120,10 +124,53 @@ export const Scripts = () => {
       graphHelper.visible = false;
       navMeshGroup.visible = false;
 
-      const vehicle = new CollisionVehicle(navMesh);
-      vehicle.setRenderComponent(vehicleMesh, sync);
-      entityManager.add(vehicle);
-      vehicle.steering.add(followPathBehavior);
+      const vehicle2 = new CollisionVehicle(navMesh);
+      vehicle2.setRenderComponent(vehicleMesh, sync);
+      entityManager.add(vehicle2);
+      vehicle2.steering.add(followPathBehavior);
+      vehicle2.position.set(0, 0, 0); // start position
+
+      const pointA = new THREE.Vector3(-3, 0, 0);
+      const pointB = new THREE.Vector3(-3, 0, -3);
+      const pointC = new THREE.Vector3(0, 0, 0);
+
+      // Helper to create a button
+      function createNavButton(
+        label: string,
+        position: { top: number; left: number },
+        target: THREE.Vector3
+      ) {
+        const button = document.createElement("button");
+        button.textContent = label;
+        button.style.position = "absolute";
+        button.style.top = `${position.top}px`;
+        button.style.left = `${position.left}px`;
+        document.body.appendChild(button);
+
+        button.addEventListener("click", () => {
+          const yukaTarget = new YUKA.Vector3(target.x, target.y, target.z);
+          findPathTo(yukaTarget);
+        });
+      }
+
+      // Create buttons
+      createNavButton("Go to Point A", { top: 20, left: 20 }, pointA);
+      createNavButton("Go to Point B", { top: 60, left: 20 }, pointB);
+      createNavButton("Go to Point C", { top: 100, left: 20 }, pointC);
+
+      function findPathTo(target) {
+        const from = vehicle2.position; // where we current are at
+        const to = target; // where we want to go
+        const path = navMesh.findPath(from, to); // findPath shortest path calculation behind the scenes
+
+        const followPathBehavior = vehicle2.steering.behaviors[0];
+        followPathBehavior.active = true;
+
+        // clear old path and refill with new path everytime new click is captured
+        followPathBehavior.path.clear();
+
+        for (let point of path) followPathBehavior.path.add(point);
+      }
     });
 
     const time = new YUKA.Time();
