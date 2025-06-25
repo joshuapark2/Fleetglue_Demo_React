@@ -6,6 +6,8 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { createGraphHelper } from "../utils/graph_helper";
 import { createConvexRegionHelper } from "../utils/navmesh_helper";
 import { CollisionVehicle } from "../types/collisionVehicle";
+import { FontLoader } from "three/examples/jsm/Addons.js";
+import { TextGeometry } from "three/examples/jsm/Addons.js";
 
 export const Scripts = () => {
   const mountRef = useRef<HTMLDivElement>(null);
@@ -82,7 +84,7 @@ export const Scripts = () => {
       navMeshGroup.visible = false;
 
       // ! Create Checkpoints
-      const pointA = new THREE.Vector3(-3, 0.2, 0);
+      const pointA = new THREE.Vector3(-3, 0.2, 3);
       const pointB = new THREE.Vector3(-3, 0.2, -3);
       const pointC = new THREE.Vector3(0, 0.2, 0);
       const pointD = new THREE.Vector3(7, 1.2, 3);
@@ -108,12 +110,150 @@ export const Scripts = () => {
         robotArray.push(robot); // add robot to our array
       }
 
-      // ! Generate instructions of waypoints of each robot
+      // ! Start instructions button:
+      const startButton = document.createElement("button");
+      startButton.textContent = "Start All Paths";
+      startButton.style.position = "absolute";
+      startButton.style.top = "270px";
+      startButton.style.left = "20px";
+      document.body.appendChild(startButton);
+
+      // Generate instructions of waypoints of each robot
       const robotInstruction: Map<number, THREE.Vector3[]> = new Map();
       // contains id and target
 
-      // ! Create checkboxes to generate grouping instructions
+      startButton.addEventListener("click", () => {
+        for (const [id, pathList] of robotInstruction.entries()) {
+          const robot = robotArray[id];
+          if (!robot || pathList.length === 0) continue;
+
+          const origin = robot.position;
+
+          // Create a full YUKA path
+          const yukaPath = new YUKA.Path();
+
+          yukaPath.add(new YUKA.Vector3(origin.x, origin.y, origin.z));
+          for (const point of pathList) {
+            yukaPath.add(new YUKA.Vector3(point.x, point.y, point.z)); // turn THREE into YUKA Vector3
+          }
+
+          const optimalPath = robot.steering.behaviors[0];
+          optimalPath.active = true;
+          optimalPath.path.clear();
+
+          for (let i = 0; i < yukaPath._waypoints.length - 1; i++) {
+            const from = yukaPath._waypoints[i];
+            const to = yukaPath._waypoints[i + 1];
+
+            if (
+              Math.abs(from.x - to.x) < 0.001 &&
+              Math.abs(from.y - to.y) < 0.001 &&
+              Math.abs(from.z - to.z) < 0.001
+            ) {
+              continue;
+            }
+
+            const jitteredTo = to.clone(); // purpose is to avoid entities to be directly on top of each other
+            jitteredTo.x += (Math.random() - 0.5) * 0.5; // ±0.25 units
+            jitteredTo.z += (Math.random() - 0.5) * 0.5;
+
+            const segment = navMesh.findPath(from, jitteredTo);
+
+            for (const point of segment) {
+              optimalPath.path.add(point);
+            }
+          }
+        }
+        robotInstruction.clear();
+        updateUIPanel(); // reflect cleared instructions
+      });
+
+      // ! UI Panel:
+      const uiPanel = document.createElement("div");
+      uiPanel.style.position = "absolute";
+      uiPanel.style.right = "20px";
+      uiPanel.style.top = "20px";
+      uiPanel.style.width = "250px";
+      uiPanel.style.maxHeight = "800px";
+      uiPanel.style.overflowY = "auto";
+      uiPanel.style.backgroundColor = "#f0f0f0";
+      uiPanel.style.border = "1px solid #ccc";
+      uiPanel.style.padding = "10px";
+      uiPanel.style.fontFamily = "Arial, sans-serif";
+      uiPanel.style.fontSize = "14px";
+      document.body.appendChild(uiPanel);
+      updateUIPanel();
+
+      function updateUIPanel() {
+        uiPanel.innerHTML = "<h3>Robot Instructions</h3>";
+        for (const [id, pathList] of robotInstruction.entries()) {
+          const robotDiv = document.createElement("div");
+          robotDiv.innerHTML = `<strong>Robot ${id}</strong>: ${
+            pathList.length > 0
+              ? pathList.length + " waypoint(s)"
+              : "No instructions"
+          }`;
+
+          const list = document.createElement("ul");
+          for (const point of pathList) {
+            const item = document.createElement("li");
+            item.textContent = `(${point.x.toFixed(1)}, ${point.y.toFixed(
+              1
+            )}, ${point.z.toFixed(1)})`;
+            list.appendChild(item);
+          }
+
+          robotDiv.appendChild(list);
+          uiPanel.appendChild(robotDiv);
+        }
+
+        if (robotInstruction.size === 0) {
+          uiPanel.innerHTML += "<p>No instructions assigned.</p>";
+        }
+      }
+
+      // ! Helper to create a button
+      function createNavButton(
+        label: string,
+        position: { top: number; left: number },
+        target: THREE.Vector3,
+        id: number
+      ) {
+        const button = document.createElement("button");
+        button.textContent = label;
+        button.style.position = "absolute";
+        button.style.top = `${position.top}px`;
+        button.style.left = `${position.left}px`;
+        document.body.appendChild(button);
+
+        button.addEventListener("click", () => {
+          for (const id of selectedRobots) {
+            if (!robotInstruction.has(id)) {
+              robotInstruction.set(id, []);
+            }
+            robotInstruction.get(id)!.push(target);
+          }
+
+          updateUIPanel();
+          //console.log("Updated instructions:", robotInstruction);
+        });
+      }
+      // ! Create buttons
+      createNavButton("Go to Assembly", { top: 20, left: 20 }, pointA, 1);
+      createNavButton("Go to Packaging", { top: 60, left: 20 }, pointB, 1);
+      createNavButton("Go to Storage", { top: 100, left: 20 }, pointC, 1);
+      createNavButton("Go to Conveyor Belt", { top: 140, left: 20 }, pointD, 2);
+      createNavButton("Go to Testing", { top: 180, left: 20 }, pointE, 2);
+      //createNavButton("Go to Point F", { top: 220, left: 20 }, pointF, 2);
+
+      // ! Create Checkboxes
+      // Create checkboxes to generate grouping instructions
       const selectedRobots = new Set<number>();
+
+      // Generate checkboxes for each robot
+      for (let i = 0; i < robotCount; i++) {
+        createCheckboxForRobot(i);
+      }
 
       function createCheckboxForRobot(id: number) {
         const checkbox = document.createElement("input");
@@ -142,86 +282,63 @@ export const Scripts = () => {
         document.body.appendChild(label);
       }
 
-      // Generate checkboxes for each robot
-      for (let i = 0; i < robotCount; i++) {
-        createCheckboxForRobot(i);
+      // ! Create waypoints
+      function addMarkerAt(position: THREE.Vector3, color: string) {
+        const geometry = new THREE.SphereGeometry(0.2, 16, 16);
+        const material = new THREE.MeshBasicMaterial({ color });
+        const sphere = new THREE.Mesh(geometry, material);
+        sphere.position.copy(position);
+        scene.add(sphere);
       }
 
-      // ! Helper to create a button
-      function createNavButton(
-        label: string,
-        position: { top: number; left: number },
-        target: THREE.Vector3,
-        id: number
-      ) {
-        const button = document.createElement("button");
-        button.textContent = label;
-        button.style.position = "absolute";
-        button.style.top = `${position.top}px`;
-        button.style.left = `${position.left}px`;
-        document.body.appendChild(button);
+      // Visualize checkpoints
+      addMarkerAt(pointA, "red");
+      addMarkerAt(pointB, "orange");
+      addMarkerAt(pointC, "yellow");
+      addMarkerAt(pointD, "green");
+      addMarkerAt(pointE, "blue");
+      //addMarkerAt(pointF, "purple");
 
-        button.addEventListener("click", () => {
-          for (const id of selectedRobots) {
-            if (!robotInstruction.has(id)) {
-              robotInstruction.set(id, []);
-            }
-            robotInstruction.get(id)!.push(target);
-          }
-          console.log("Updated instructions:", robotInstruction);
+      // Creating text
+      function create3DText(
+        text: string,
+        color: string,
+        position: THREE.Vector3,
+        scene: THREE.Scene,
+        fontPath = "/Roboto_Light_Regular.json"
+      ) {
+        const fontLoader = new FontLoader();
+        fontLoader.load(fontPath, (font) => {
+          const textGeom = new TextGeometry(text, {
+            font: font,
+            size: 0.6,
+            depth: 0.1,
+          });
+
+          const material = new THREE.MeshBasicMaterial({ color }); // bright white, very readable
+
+          const textMesh = new THREE.Mesh(textGeom, material);
+          textMesh.position.set(
+            position.x - 1.5,
+            position.y + 2,
+            position.z - 0.5
+          );
+          textMesh.rotation.y = -0.5;
+
+          scene.add(textMesh);
         });
       }
-      // Create buttons
-      createNavButton("Go to Point A", { top: 20, left: 20 }, pointA, 1);
-      createNavButton("Go to Point B", { top: 60, left: 20 }, pointB, 1);
-      createNavButton("Go to Point C", { top: 100, left: 20 }, pointC, 1);
-      createNavButton("Go to Point D", { top: 140, left: 20 }, pointD, 2);
-      createNavButton("Go to Point E", { top: 180, left: 20 }, pointE, 2);
-      createNavButton("Go to Point F", { top: 220, left: 20 }, pointF, 2);
+      create3DText("Assembly", "red", pointA, scene);
+      create3DText("Packaging", "orange", pointB, scene);
+      create3DText(
+        "Storage",
+        "yellow",
+        new THREE.Vector3(pointC.x, pointC.y + 1, pointC.z),
 
-      // ! Start instructions button:
-      const startButton = document.createElement("button");
-      startButton.textContent = "Start All Paths";
-      startButton.style.position = "absolute";
-      startButton.style.top = "270px";
-      startButton.style.left = "20px";
-      document.body.appendChild(startButton);
-
-      startButton.addEventListener("click", () => {
-        for (const [id, pathList] of robotInstruction.entries()) {
-          const robot = robotArray[id];
-          if (!robot || pathList.length === 0) continue;
-
-          const origin = robot.position;
-
-          // Create a full YUKA path
-          const yukaPath = new YUKA.Path();
-
-          yukaPath.add(new YUKA.Vector3(origin.x, origin.y, origin.z));
-          for (const point of pathList) {
-            yukaPath.add(new YUKA.Vector3(point.x, point.y, point.z)); // turn THREE into YUKA Vector3
-          }
-
-          const optimalPath = robot.steering.behaviors[0];
-          optimalPath.active = true;
-          optimalPath.path.clear();
-
-          for (let i = 0; i < yukaPath._waypoints.length - 1; i++) {
-            const from = yukaPath._waypoints[i];
-            const to = yukaPath._waypoints[i + 1];
-
-            const jitteredTo = to.clone(); // purpose is to avoid entities to be directly on top of each other
-            jitteredTo.x += (Math.random() - 0.5) * 0.5; // ±0.25 units
-            jitteredTo.z += (Math.random() - 0.5) * 0.5;
-
-            const segment = navMesh.findPath(from, jitteredTo);
-
-            for (const point of segment) {
-              optimalPath.path.add(point);
-            }
-          }
-        }
-      });
+        scene
+      );
+      create3DText("Conveyor Belt", "green", pointD, scene);
+      create3DText("Testing", "blue", pointE, scene);
     });
 
     const time = new YUKA.Time();
