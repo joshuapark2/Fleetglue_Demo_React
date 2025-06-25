@@ -135,7 +135,6 @@ export const Scripts = () => {
       // ! Generate instructions of waypoints of each robot
       const robotInstruction: Map<number, THREE.Vector3[]> = new Map();
       // contains id and target
-      const robotQueue: Map<number, THREE.Vector3[]> = new Map();
 
       // ! Helper to create a button
       function createNavButton(
@@ -195,7 +194,7 @@ export const Scripts = () => {
           for (const point of pathList) {
             yukaPath.add(new YUKA.Vector3(point.x, point.y, point.z)); // turn THREE into YUKA Vector3
           }
-          // console.log("paths:", yukaPath);
+          console.log("paths:", yukaPath);
 
           const followPath = robot.steering.behaviors[0];
           followPath.path.clear();
