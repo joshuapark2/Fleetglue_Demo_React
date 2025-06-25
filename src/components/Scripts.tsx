@@ -89,33 +89,158 @@ export const Scripts = () => {
       const pointC = new THREE.Vector3(0, 0.2, 0);
       const pointD = new THREE.Vector3(7, 1.2, 3);
       const pointE = new THREE.Vector3(7, 1.2, -3);
-      const pointF = new THREE.Vector3(-3, 0.2, 0);
+      const pointF = new THREE.Vector3(0, 0.2, -1);
+      // 0, 0.2, -3
+      // 3, 0.2, -3
+      // 3, 0.2, -1
+      // 0, 0.2, -1
+
+      const labelMap = new Map<string, string>();
+      labelMap.set(pointA.toArray().join(","), "Assembly");
+      labelMap.set(pointB.toArray().join(","), "Packaging");
+      labelMap.set(pointC.toArray().join(","), "Storage");
+      labelMap.set(pointD.toArray().join(","), "Conveyor Belt");
+      labelMap.set(pointE.toArray().join(","), "Testing");
+
+      function getLabelFromVector(v: THREE.Vector3): string {
+        return (
+          labelMap.get(v.toArray().join(",")) ||
+          `(${v.x.toFixed(1)}, ${v.y.toFixed(1)}, ${v.z.toFixed(1)})`
+        );
+      }
 
       // ! Setup Vehicle Tracking and Generate robots dynamically
       const robotArray: CollisionVehicle[] = [];
+      const robotState: Map<number, string> = new Map();
+      const robotColor = new Map<number, string>();
       const robotCount = 5;
+
       for (let i = 0; i < robotCount; i++) {
-        const vehicleMeshClone = vehicleMesh.clone(); // first create clone of vehicleMesh skeleton obj.
+        const vehicleMeshClone = vehicleMesh.clone();
+
+        const color = new THREE.Color(
+          Math.random(),
+          Math.random(),
+          Math.random()
+        );
+        const hexColor = `#${color.getHexString()}`; // Convert to hex string
+
+        vehicleMeshClone.traverse((child) => {
+          if ((child as THREE.Mesh).isMesh) {
+            (child as THREE.Mesh).material = new THREE.MeshStandardMaterial({
+              color,
+            });
+          }
+        });
+
+        robotColor.set(i, hexColor); // Save for use in labels
+
         scene.add(vehicleMeshClone);
+        const robot = new CollisionVehicle(navMesh, i);
+        robot.setRenderComponent(vehicleMeshClone, sync);
+        // spawn in by defining the bounds of the rectangle
+        const minX = 0,
+          maxX = 3;
+        const minZ = -3,
+          maxZ = -1;
+        const randomX = Math.random() * (maxX - minX) + minX;
+        const randomZ = Math.random() * (maxZ - minZ) + minZ;
+        robot.position.set(randomX, 0.2, randomZ);
 
-        const robot = new CollisionVehicle(navMesh, i); // create new bot with moving parameter of navMesh
-        robot.setRenderComponent(vehicleMeshClone, sync); // give robot a mind
-        robot.position.set(Math.random() * 4, 0.2, Math.random() * 4); // spawn location
-
-        const individualPath = new YUKA.FollowPathBehavior(); // Each robot must have it's own instance
+        const individualPath = new YUKA.FollowPathBehavior();
         individualPath.active = false;
-
-        robot.steering.add(individualPath); // steering behavior
-        entityManager.add(robot); // Managing all central objects of game
-        robotArray.push(robot); // add robot to our array
+        robot.steering.add(individualPath);
+        entityManager.add(robot);
+        robotArray.push(robot);
+        robotState.set(i, "Walk");
       }
 
+      // ! Speed Buttons and States
+      // Create title for speed buttons
+      const statusTitle = document.createElement("p");
+      statusTitle.textContent = "3. Change Status";
+      statusTitle.style.position = "absolute";
+      statusTitle.style.top = "270px";
+      statusTitle.style.left = "180px";
+      statusTitle.style.margin = "0";
+      statusTitle.style.fontFamily = "Arial, sans-serif";
+      statusTitle.style.fontSize = "16px";
+      document.body.appendChild(statusTitle);
+
+      // Speed Buttons
+      const speedButtonsContainer = document.createElement("div");
+      speedButtonsContainer.style.position = "absolute";
+      speedButtonsContainer.style.top = "300px";
+      speedButtonsContainer.style.left = "180px";
+      document.body.appendChild(speedButtonsContainer);
+
+      ["Broken", "Walk", "Run"].forEach((state) => {
+        const button = document.createElement("button");
+        button.textContent = state;
+        button.style.marginRight = "5px";
+        speedButtonsContainer.appendChild(button);
+
+        button.addEventListener("click", () => {
+          for (const id of selectedRobots) {
+            const robot = robotArray[id];
+            if (!robot) continue;
+
+            if (state === "Broken") {
+              robot.maxSpeed = 0.7;
+              robot.steering.behaviors[0].active = false;
+              robotInstruction.delete(id);
+
+              // Create and show alert
+              const alertBox = document.createElement("div");
+              alertBox.textContent = `Removed Robot ${
+                id + 1
+              } Instructions due to Malfunctions`;
+              alertBox.style.position = "absolute";
+              alertBox.style.top = `${30 + id * 50}px`;
+              alertBox.style.left = "50%";
+              alertBox.style.transform = "translateX(-50%)";
+              alertBox.style.backgroundColor = "#f8d7da";
+              alertBox.style.color = "#721c24";
+              alertBox.style.padding = "10px 20px";
+              alertBox.style.border = "1px solid #f5c6cb";
+              alertBox.style.borderRadius = "4px";
+              alertBox.style.zIndex = "1000";
+              alertBox.style.fontFamily = "Arial, sans-serif";
+
+              document.body.appendChild(alertBox);
+
+              // Remove after 5 seconds
+              setTimeout(() => {
+                alertBox.remove();
+              }, 5000);
+            } else if (state === "Walk") {
+              robot.maxSpeed = 1.5;
+            } else if (state === "Run") {
+              robot.maxSpeed = 3;
+            }
+            robotState.set(id, state);
+          }
+          updateUIPanel();
+        });
+      });
+
       // ! Start instructions button:
+      // Create title for speed buttons
+      const startTitle = document.createElement("p");
+      startTitle.textContent = "4. Press Start";
+      startTitle.style.position = "absolute";
+      startTitle.style.top = "340px";
+      startTitle.style.left = "180px";
+      startTitle.style.margin = "0";
+      startTitle.style.fontFamily = "Arial, sans-serif";
+      startTitle.style.fontSize = "16px";
+      document.body.appendChild(startTitle);
+      // button
       const startButton = document.createElement("button");
       startButton.textContent = "Start All Paths";
       startButton.style.position = "absolute";
-      startButton.style.top = "270px";
-      startButton.style.left = "20px";
+      startButton.style.top = "370px";
+      startButton.style.left = "180px";
       document.body.appendChild(startButton);
 
       // Generate instructions of waypoints of each robot
@@ -154,8 +279,8 @@ export const Scripts = () => {
             }
 
             const jitteredTo = to.clone(); // purpose is to avoid entities to be directly on top of each other
-            jitteredTo.x += (Math.random() - 0.5) * 0.5; // ±0.25 units
-            jitteredTo.z += (Math.random() - 0.5) * 0.5;
+            jitteredTo.x += (Math.random() - 0.5) * 1; // ±0.25 units
+            jitteredTo.z += (Math.random() - 0.5) * 1;
 
             const segment = navMesh.findPath(from, jitteredTo);
 
@@ -165,6 +290,7 @@ export const Scripts = () => {
           }
         }
         robotInstruction.clear();
+        recentlyUpdatedRobots.clear();
         updateUIPanel(); // reflect cleared instructions
       });
 
@@ -184,40 +310,54 @@ export const Scripts = () => {
       document.body.appendChild(uiPanel);
       updateUIPanel();
 
+      // ! Update UI on Right
       function updateUIPanel() {
         uiPanel.innerHTML = "<h3>Robot Instructions</h3>";
-        for (const [id, pathList] of robotInstruction.entries()) {
-          const robotDiv = document.createElement("div");
-          robotDiv.innerHTML = `<strong>Robot ${id}</strong>: ${
-            pathList.length > 0
-              ? pathList.length + " waypoint(s)"
-              : "No instructions"
-          }`;
-
-          const list = document.createElement("ul");
-          for (const point of pathList) {
-            const item = document.createElement("li");
-            item.textContent = `(${point.x.toFixed(1)}, ${point.y.toFixed(
-              1
-            )}, ${point.z.toFixed(1)})`;
-            list.appendChild(item);
-          }
-
-          robotDiv.appendChild(list);
-          uiPanel.appendChild(robotDiv);
-        }
 
         if (robotInstruction.size === 0) {
           uiPanel.innerHTML += "<p>No instructions assigned.</p>";
         }
+
+        for (const [id, waypoints] of robotInstruction.entries()) {
+          const container = document.createElement("div");
+          container.style.marginBottom = "1em";
+
+          const header = document.createElement("h4");
+          header.textContent = `Robot ${id + 1} (${robotState.get(id)})`;
+          header.style.marginLeft = "10px";
+          if (recentlyUpdatedRobots.has(id)) {
+            header.style.backgroundColor = "#f1c40f";
+          }
+
+          const clearBtn = document.createElement("button");
+          clearBtn.textContent = "Clear";
+          clearBtn.style.marginLeft = "10px";
+          clearBtn.addEventListener("click", () => {
+            robotInstruction.delete(id);
+            updateUIPanel();
+          });
+
+          const list = document.createElement("ul");
+          waypoints.forEach((point) => {
+            const item = document.createElement("li");
+            item.textContent = getLabelFromVector(point);
+            list.appendChild(item);
+          });
+
+          container.appendChild(header);
+          container.appendChild(clearBtn);
+          container.appendChild(list);
+          uiPanel.appendChild(container);
+        }
       }
+
+      const recentlyUpdatedRobots = new Set<number>();
 
       // ! Helper to create a button
       function createNavButton(
         label: string,
         position: { top: number; left: number },
-        target: THREE.Vector3,
-        id: number
+        target: THREE.Vector3
       ) {
         const button = document.createElement("button");
         button.textContent = label;
@@ -232,43 +372,73 @@ export const Scripts = () => {
               robotInstruction.set(id, []);
             }
             robotInstruction.get(id)!.push(target);
+            recentlyUpdatedRobots.add(id);
           }
 
           updateUIPanel();
-          //console.log("Updated instructions:", robotInstruction);
         });
       }
       // ! Create buttons
-      createNavButton("Go to Assembly", { top: 20, left: 20 }, pointA, 1);
-      createNavButton("Go to Packaging", { top: 60, left: 20 }, pointB, 1);
-      createNavButton("Go to Storage", { top: 100, left: 20 }, pointC, 1);
-      createNavButton("Go to Conveyor Belt", { top: 140, left: 20 }, pointD, 2);
-      createNavButton("Go to Testing", { top: 180, left: 20 }, pointE, 2);
-      //createNavButton("Go to Point F", { top: 220, left: 20 }, pointF, 2);
+      // Create section title for instructions
+      const instructionTitle = document.createElement("p");
+      instructionTitle.textContent = "2. Select Instructions";
+      instructionTitle.style.position = "absolute";
+      instructionTitle.style.top = "40px";
+      instructionTitle.style.left = "180px";
+      instructionTitle.style.margin = "0";
+      instructionTitle.style.fontFamily = "Arial, sans-serif";
+      instructionTitle.style.fontSize = "16px";
+      document.body.appendChild(instructionTitle);
 
-      // ! Create Checkboxes
+      // Create navigation / instructions buttons
+      createNavButton("Go to Assembly", { top: 70, left: 180 }, pointA);
+      createNavButton("Go to Packaging", { top: 110, left: 180 }, pointB);
+      createNavButton("Go to Storage", { top: 150, left: 180 }, pointC);
+      createNavButton("Go to Conveyor Belt", { top: 190, left: 180 }, pointD);
+      createNavButton("Go to Testing", { top: 230, left: 180 }, pointE);
+
+      //createNavButton("Go to Point F", { top: 270, left: 180 }, pointF);
+
+      // ! Create Checkboxes for Robots
       // Create checkboxes to generate grouping instructions
       const selectedRobots = new Set<number>();
+      const robotCheckboxMap = new Map<number, HTMLInputElement>();
 
       // Generate checkboxes for each robot
       for (let i = 0; i < robotCount; i++) {
         createCheckboxForRobot(i);
       }
 
+      // Create section title for robot selection
+      const robotTitle = document.createElement("p");
+      robotTitle.textContent = "1. Select Robot(s)";
+      robotTitle.style.position = "absolute";
+      robotTitle.style.top = "40px";
+      robotTitle.style.left = "20px";
+      robotTitle.style.margin = "0";
+      robotTitle.style.fontFamily = "Arial, sans-serif";
+      robotTitle.style.fontSize = "16px";
+      document.body.appendChild(robotTitle);
+
       function createCheckboxForRobot(id: number) {
         const checkbox = document.createElement("input");
         checkbox.type = "checkbox";
         checkbox.id = `robot-${id}`;
         checkbox.style.position = "absolute";
-        checkbox.style.top = `${300 + id * 30}px`;
+        checkbox.style.top = `${70 + id * 30}px`;
         checkbox.style.left = "20px";
 
         const label = document.createElement("label");
         label.htmlFor = checkbox.id;
-        label.innerText = `Robot ${id}`;
+        label.innerText = `Robot ${id + 1}`;
+        //label.style.backgroundColor = "#292828";
         label.style.position = "absolute";
-        label.style.top = `${300 + id * 30}px`;
+        label.style.top = `${70 + id * 30}px`;
         label.style.left = "50px";
+
+        // Use stored robot color for the label
+        const robotColors = robotColor.get(id);
+        if (robotColors) label.style.color = robotColors;
 
         checkbox.addEventListener("change", (e) => {
           if (checkbox.checked) {
@@ -280,7 +450,24 @@ export const Scripts = () => {
 
         document.body.appendChild(checkbox);
         document.body.appendChild(label);
+        robotCheckboxMap.set(id, checkbox);
       }
+      // Reset selected checkbox
+      // Create "Reset Selection" button
+      const resetButton = document.createElement("button");
+      resetButton.textContent = "Reset Selection";
+      resetButton.style.position = "absolute";
+      resetButton.style.top = `${70 + robotArray.length * 30 + 10}px`;
+      resetButton.style.left = "20px";
+      resetButton.style.fontSize = "12px";
+      document.body.appendChild(resetButton);
+
+      resetButton.addEventListener("click", () => {
+        for (const [id, checkbox] of robotCheckboxMap.entries()) {
+          checkbox.checked = false;
+          selectedRobots.delete(id); // no need to dispatch, just update directly
+        }
+      });
 
       // ! Create waypoints
       function addMarkerAt(position: THREE.Vector3, color: string) {
@@ -297,7 +484,7 @@ export const Scripts = () => {
       addMarkerAt(pointC, "yellow");
       addMarkerAt(pointD, "green");
       addMarkerAt(pointE, "blue");
-      //addMarkerAt(pointF, "purple");
+      addMarkerAt(pointF, "purple");
 
       // Creating text
       function create3DText(
