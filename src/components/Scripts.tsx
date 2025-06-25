@@ -133,6 +133,8 @@ export const Scripts = () => {
       const pointA = new THREE.Vector3(-3, 0.2, 0);
       const pointB = new THREE.Vector3(-3, 0.2, -3);
       const pointC = new THREE.Vector3(0, 0.2, 0);
+      const pointD = new THREE.Vector3(7, 1.2, 3);
+      const pointE = new THREE.Vector3(7, 1.2, -3);
 
       // Helper to create a button
       function createNavButton(
@@ -157,6 +159,8 @@ export const Scripts = () => {
       createNavButton("Go to Point A", { top: 20, left: 20 }, pointA);
       createNavButton("Go to Point B", { top: 60, left: 20 }, pointB);
       createNavButton("Go to Point C", { top: 100, left: 20 }, pointC);
+      createNavButton("Go to Point D", { top: 140, left: 20 }, pointD);
+      createNavButton("Go to Point E", { top: 180, left: 20 }, pointE);
 
       function findPathTo(target) {
         const from = vehicle2.position; // where we current are at
