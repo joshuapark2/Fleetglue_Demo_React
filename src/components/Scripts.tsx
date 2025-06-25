@@ -6,6 +6,7 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { createGraphHelper } from "../utils/graph_helper";
 import { createConvexRegionHelper } from "../utils/navmesh_helper";
 import { CollisionVehicle } from "../types/collisionVehicle";
+import { assign } from "three/tsl";
 
 export const Scripts = () => {
   const mountRef = useRef<HTMLDivElement>(null);
@@ -46,11 +47,7 @@ export const Scripts = () => {
     const vehicleMaterial = new THREE.MeshNormalMaterial();
     const vehicleMesh = new THREE.Mesh(vehicleGeometry, vehicleMaterial);
     vehicleMesh.matrixAutoUpdate = false; // Let YUKA handle the movements
-    scene.add(vehicleMesh);
-
-    // ! Adding YUKA Vehicle - Connecting body (mesh) and mind (YUKA)
-    //const vehicle = new YUKA.Vehicle();
-    //vehicle.setRenderComponent(vehicleMesh, sync);
+    //scene.add(vehicleMesh);
 
     function sync(entity: any, renderComponent: any) {
       renderComponent.matrix.copy(entity.worldMatrix);
@@ -68,19 +65,6 @@ export const Scripts = () => {
     });
 
     // ! Creating a path entity to follow in YUKA
-    // const path = new YUKA.Path();
-    // path.add(new YUKA.Vector3(0, 0, 0));
-    // path.add(new YUKA.Vector3(-3, 0, 0));
-    // path.add(new YUKA.Vector3(-3, 0, -3));
-
-    // path.loop = true;
-
-    // Spawn Vehicle at first checkpoint
-    //vehicle.position.copy(path.current());
-
-    // make vehicle move
-    // const followPathBehavior = new YUKA.FollowPathBehavior(path, 1);
-    //vehicle.steering.add(followPathBehavior);
 
     const followPathBehavior = new YUKA.FollowPathBehavior(); // (path, destination tolerance)
     followPathBehavior.active = false; // disables/enables default FollowPathBehavior
@@ -112,35 +96,49 @@ export const Scripts = () => {
     // ! Creating nav mesh for unit collision
     const navmeshLoader = new YUKA.NavMeshLoader();
     navmeshLoader.load("/NavMesh.glb").then((navigationMesh) => {
+      // navMesh + graph creation
       const navMesh = navigationMesh;
       const graph = navMesh.graph;
-
       let graphHelper = createGraphHelper(graph, 0.2);
       let navMeshGroup = createConvexRegionHelper(navMesh);
-
       scene.add(graphHelper);
       scene.add(navMeshGroup);
-
       graphHelper.visible = false;
       navMeshGroup.visible = false;
-
-      const vehicle2 = new CollisionVehicle(navMesh);
-      vehicle2.setRenderComponent(vehicleMesh, sync);
-      entityManager.add(vehicle2);
-      vehicle2.steering.add(followPathBehavior);
-      vehicle2.position.set(0, 0.2, 0); // start position
 
       const pointA = new THREE.Vector3(-3, 0.2, 0);
       const pointB = new THREE.Vector3(-3, 0.2, -3);
       const pointC = new THREE.Vector3(0, 0.2, 0);
       const pointD = new THREE.Vector3(7, 1.2, 3);
       const pointE = new THREE.Vector3(7, 1.2, -3);
+      const pointF = new THREE.Vector3(-3, 0.2, 0);
+
+      // Setup Vehicle Tracking and Generate robots dynamically
+      const robotArray: CollisionVehicle[] = [];
+      const robotCount = 5;
+
+      for (let i = 0; i < robotCount; i++) {
+        const vehicleMeshClone = vehicleMesh.clone(); // first create clone of vehicleMesh skeleton obj.
+        scene.add(vehicleMeshClone);
+
+        const robot = new CollisionVehicle(navMesh, i); // create new bot with moving parameter of navMesh
+        robot.setRenderComponent(vehicleMeshClone, sync); // give robot a mind
+        robot.position.set(Math.random() * 4, 0.2, Math.random() * 4); // spawn location
+
+        const individualPath = new YUKA.FollowPathBehavior(); // Each robot must have it's own instance
+        individualPath.active = false;
+
+        robot.steering.add(individualPath); // steering behavior
+        entityManager.add(robot); // Managing all central objects of game
+        robotArray.push(robot); // add robot to our array
+      }
 
       // Helper to create a button
       function createNavButton(
         label: string,
         position: { top: number; left: number },
-        target: THREE.Vector3
+        target: THREE.Vector3,
+        id: number
       ) {
         const button = document.createElement("button");
         button.textContent = label;
@@ -150,30 +148,32 @@ export const Scripts = () => {
         document.body.appendChild(button);
 
         button.addEventListener("click", () => {
-          const yukaTarget = new YUKA.Vector3(target.x, target.y, target.z);
-          findPathTo(yukaTarget);
+          const robot = robotArray[id];
+          if (robot) {
+            findPathTo(robot, target);
+          }
         });
       }
 
       // Create buttons
-      createNavButton("Go to Point A", { top: 20, left: 20 }, pointA);
-      createNavButton("Go to Point B", { top: 60, left: 20 }, pointB);
-      createNavButton("Go to Point C", { top: 100, left: 20 }, pointC);
-      createNavButton("Go to Point D", { top: 140, left: 20 }, pointD);
-      createNavButton("Go to Point E", { top: 180, left: 20 }, pointE);
+      createNavButton("Go to Point A", { top: 20, left: 20 }, pointA, 0);
+      createNavButton("Go to Point B", { top: 60, left: 20 }, pointB, 1);
+      createNavButton("Go to Point C", { top: 100, left: 20 }, pointC, 2);
+      createNavButton("Go to Point D", { top: 140, left: 20 }, pointD, 3);
+      createNavButton("Go to Point E", { top: 180, left: 20 }, pointE, 4);
+      createNavButton("Go to Point F", { top: 220, left: 20 }, pointF, 1);
 
-      function findPathTo(target) {
-        const from = vehicle2.position; // where we current are at
-        const to = target; // where we want to go
-        const path = navMesh.findPath(from, to); // findPath shortest path calculation behind the scenes
+      // Generalize findPathTo
+      function findPathTo(robot: CollisionVehicle, target: THREE.Vector3) {
+        const yukaTarget = new YUKA.Vector3(target.x, target.y, target.z);
+        const from = robot.position;
+        const path = navMesh.findPath(from, yukaTarget);
 
-        const followPathBehavior = vehicle2.steering.behaviors[0];
-        followPathBehavior.active = true;
+        const individualPath = robot.steering.behaviors[0];
+        individualPath.active = true;
 
-        // clear old path and refill with new path everytime new click is captured
-        followPathBehavior.path.clear();
-
-        for (let point of path) followPathBehavior.path.add(point);
+        individualPath.path.clear();
+        for (let point of path) individualPath.path.add(point);
       }
     });
 
