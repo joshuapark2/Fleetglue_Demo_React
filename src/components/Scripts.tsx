@@ -128,11 +128,11 @@ export const Scripts = () => {
       vehicle2.setRenderComponent(vehicleMesh, sync);
       entityManager.add(vehicle2);
       vehicle2.steering.add(followPathBehavior);
-      vehicle2.position.set(0, 0, 0); // start position
+      vehicle2.position.set(0, 0.2, 0); // start position
 
-      const pointA = new THREE.Vector3(-3, 0, 0);
-      const pointB = new THREE.Vector3(-3, 0, -3);
-      const pointC = new THREE.Vector3(0, 0, 0);
+      const pointA = new THREE.Vector3(-3, 0.2, 0);
+      const pointB = new THREE.Vector3(-3, 0.2, -3);
+      const pointC = new THREE.Vector3(0, 0.2, 0);
 
       // Helper to create a button
       function createNavButton(
