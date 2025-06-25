@@ -54,7 +54,6 @@ export const Scripts = () => {
 
     // Function necessary to keep track of entities
     const entityManager = new YUKA.EntityManager();
-    //entityManager.add(vehicle);
 
     // Adding our factory floor
     const loader = new GLTFLoader();
@@ -69,29 +68,6 @@ export const Scripts = () => {
     followPathBehavior.active = false; // disables/enables default FollowPathBehavior
     followPathBehavior.nextWaypointDistance = 0.5;
 
-    // More control of behavior
-    // const onPathBehavior = new YUKA.OnPathBehavior(path, 3);
-    //vehicle.steering.add(onPathBehavior);
-
-    // ! Creating Visual Path
-    // const visualPath = [];
-    // for (let i = 0; i < path._waypoints.length; i++) {
-    //   const waypoint = path._waypoints[i];
-    //   visualPath.push(waypoint.x, waypoint.y, waypoint.z);
-    // }
-
-    // Creating a buffer geometry instance (clay that can form whatever we like)
-    // const lineGeometry = new THREE.BufferGeometry();
-    // lineGeometry.setAttribute(
-    //   "position",
-    //   new THREE.Float32BufferAttribute(visualPath, 3) // takes position and passes to GPU w/ 3 elements at a time
-    // );
-
-    // Linking points with lines -> Link line -> geometry -> add to scene
-    //const lineMaterial = new THREE.LineBasicMaterial({ color: 0xffffff });
-    //const lines = new THREE.LineLoop(lineGeometry, lineMaterial);
-    //scene.add(lines);
-
     // ! Creating nav mesh for unit collision
     const navmeshLoader = new YUKA.NavMeshLoader();
     navmeshLoader.load("/NavMesh.glb").then((navigationMesh) => {
@@ -105,6 +81,7 @@ export const Scripts = () => {
       graphHelper.visible = false;
       navMeshGroup.visible = false;
 
+      // ! Create Checkpoints
       const pointA = new THREE.Vector3(-3, 0.2, 0);
       const pointB = new THREE.Vector3(-3, 0.2, -3);
       const pointC = new THREE.Vector3(0, 0.2, 0);
@@ -115,7 +92,6 @@ export const Scripts = () => {
       // ! Setup Vehicle Tracking and Generate robots dynamically
       const robotArray: CollisionVehicle[] = [];
       const robotCount = 5;
-
       for (let i = 0; i < robotCount; i++) {
         const vehicleMeshClone = vehicleMesh.clone(); // first create clone of vehicleMesh skeleton obj.
         scene.add(vehicleMeshClone);
@@ -136,6 +112,41 @@ export const Scripts = () => {
       const robotInstruction: Map<number, THREE.Vector3[]> = new Map();
       // contains id and target
 
+      // ! Create checkboxes to generate grouping instructions
+      const selectedRobots = new Set<number>();
+
+      function createCheckboxForRobot(id: number) {
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.id = `robot-${id}`;
+        checkbox.style.position = "absolute";
+        checkbox.style.top = `${300 + id * 30}px`;
+        checkbox.style.left = "20px";
+
+        const label = document.createElement("label");
+        label.htmlFor = checkbox.id;
+        label.innerText = `Robot ${id}`;
+        label.style.position = "absolute";
+        label.style.top = `${300 + id * 30}px`;
+        label.style.left = "50px";
+
+        checkbox.addEventListener("change", (e) => {
+          if (checkbox.checked) {
+            selectedRobots.add(id);
+          } else {
+            selectedRobots.delete(id);
+          }
+        });
+
+        document.body.appendChild(checkbox);
+        document.body.appendChild(label);
+      }
+
+      // Generate checkboxes for each robot
+      for (let i = 0; i < robotCount; i++) {
+        createCheckboxForRobot(i);
+      }
+
       // ! Helper to create a button
       function createNavButton(
         label: string,
@@ -150,23 +161,15 @@ export const Scripts = () => {
         button.style.left = `${position.left}px`;
         document.body.appendChild(button);
 
-        button.addEventListener(
-          "click",
-          () => {
-            // const robot = robotArray[id];
+        button.addEventListener("click", () => {
+          for (const id of selectedRobots) {
             if (!robotInstruction.has(id)) {
               robotInstruction.set(id, []);
             }
             robotInstruction.get(id)!.push(target);
-            console.log(robotInstruction);
           }
-          // button.addEventListener("click", () => {
-          //   const robot = robotArray[id];
-          //   if (robot) {
-          //     findPathTo(robot, target);
-          //   }
-          // }
-        );
+          console.log("Updated instructions:", robotInstruction);
+        });
       }
       // Create buttons
       createNavButton("Go to Point A", { top: 20, left: 20 }, pointA, 1);
@@ -207,7 +210,11 @@ export const Scripts = () => {
             const from = yukaPath._waypoints[i];
             const to = yukaPath._waypoints[i + 1];
 
-            const segment = navMesh.findPath(from, to);
+            const jitteredTo = to.clone(); // purpose is to avoid entities to be directly on top of each other
+            jitteredTo.x += (Math.random() - 0.5) * 0.5; // ±0.25 units
+            jitteredTo.z += (Math.random() - 0.5) * 0.5;
+
+            const segment = navMesh.findPath(from, jitteredTo);
 
             for (const point of segment) {
               optimalPath.path.add(point);
