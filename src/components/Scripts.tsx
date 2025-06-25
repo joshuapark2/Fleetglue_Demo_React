@@ -161,15 +161,15 @@ export const Scripts = () => {
             console.log(robotInstruction);
           }
           // button.addEventListener("click", () => {
-          //     const robot = robotArray[id];
-          //     if (robot) {
-          //       findPathTo(robot, target);
-          //     }
+          //   const robot = robotArray[id];
+          //   if (robot) {
+          //     findPathTo(robot, target);
           //   }
+          // }
         );
       }
       // Create buttons
-      createNavButton("Go to Point A", { top: 20, left: 20 }, pointA, 0);
+      createNavButton("Go to Point A", { top: 20, left: 20 }, pointA, 1);
       createNavButton("Go to Point B", { top: 60, left: 20 }, pointB, 1);
       createNavButton("Go to Point C", { top: 100, left: 20 }, pointC, 1);
       createNavButton("Go to Point D", { top: 140, left: 20 }, pointD, 2);
@@ -189,36 +189,32 @@ export const Scripts = () => {
           const robot = robotArray[id];
           if (!robot || pathList.length === 0) continue;
 
+          const origin = robot.position;
+
           // Create a full YUKA path
           const yukaPath = new YUKA.Path();
+
+          yukaPath.add(new YUKA.Vector3(origin.x, origin.y, origin.z));
           for (const point of pathList) {
             yukaPath.add(new YUKA.Vector3(point.x, point.y, point.z)); // turn THREE into YUKA Vector3
           }
-          console.log("paths:", yukaPath);
 
-          const followPath = robot.steering.behaviors[0];
-          followPath.path.clear();
-          for (const wp of yukaPath._waypoints) followPath.path.add(wp);
+          const optimalPath = robot.steering.behaviors[0];
+          optimalPath.active = true;
+          optimalPath.path.clear();
 
-          followPath.active = true;
-          console.log(
-            `Robot ${id} is now navigating through ${pathList.length} points`
-          );
+          for (let i = 0; i < yukaPath._waypoints.length - 1; i++) {
+            const from = yukaPath._waypoints[i];
+            const to = yukaPath._waypoints[i + 1];
+
+            const segment = navMesh.findPath(from, to);
+
+            for (const point of segment) {
+              optimalPath.path.add(point);
+            }
+          }
         }
       });
-
-      // Dynamic findPathTo
-      function findPathTo(robot: CollisionVehicle, target: THREE.Vector3) {
-        const yukaTarget = new YUKA.Vector3(target.x, target.y, target.z);
-        const from = robot.position;
-        const path = navMesh.findPath(from, yukaTarget);
-
-        const individualPath = robot.steering.behaviors[0];
-        individualPath.active = true;
-
-        individualPath.path.clear();
-        for (let point of path) individualPath.path.add(point);
-      }
     });
 
     const time = new YUKA.Time();
