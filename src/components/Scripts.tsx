@@ -484,7 +484,6 @@ export const Scripts = () => {
       addMarkerAt(pointC, "yellow");
       addMarkerAt(pointD, "green");
       addMarkerAt(pointE, "blue");
-      addMarkerAt(pointF, "purple");
 
       // Creating text
       function create3DText(
