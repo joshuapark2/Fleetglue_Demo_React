@@ -118,11 +118,12 @@ export const Scripts = () => {
       for (let i = 0; i < robotCount; i++) {
         const vehicleMeshClone = vehicleMesh.clone();
 
-        const color = new THREE.Color(
-          Math.random(),
-          Math.random(),
-          Math.random()
-        );
+        const hue = Math.random(); // 0 to 1 (random color family)
+        const saturation = 0.2 + Math.random() * 0.3; // 0.2–0.5 = muted (neutral)
+        const lightness = 0.1 + Math.random() * 0.2; // 0.3–0.5 = readable (not too dark)
+
+        const color = new THREE.Color();
+        color.setHSL(hue, saturation, lightness);
         const hexColor = `#${color.getHexString()}`; // Convert to hex string
 
         vehicleMeshClone.traverse((child) => {
