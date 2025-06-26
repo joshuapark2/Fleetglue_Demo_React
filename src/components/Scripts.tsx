@@ -19,21 +19,22 @@ interface ScriptsProps {
   recentlyUpdatedRobots: Set<number>;
   setRecentlyUpdatedRobots: React.Dispatch<React.SetStateAction<Set<number>>>;
   getLabelFromVector: (v: THREE.Vector3) => string;
-
   selectedRobots: ReadonlySet<number>;
-  robotColors: Map<number, string>;
+  robotColor: Map<number, string>;
+  setNavMesh: React.Dispatch<React.SetStateAction<YUKA.NavMesh | null>>;
+  setRobotArray: React.Dispatch<React.SetStateAction<CollisionVehicle[]>>;
 }
 
 export const Scripts: React.FC<ScriptsProps> = ({
   robotInstruction,
   setRobotInstruction,
-  robotState,
+
   setRobotState,
   recentlyUpdatedRobots,
   setRecentlyUpdatedRobots,
-  getLabelFromVector,
   selectedRobots,
-  robotColors,
+  setNavMesh, // ✅ Fix
+  setRobotArray, // ✅ Fix
 }) => {
   const mountRef = useRef<HTMLDivElement>(null);
 
@@ -97,24 +98,22 @@ export const Scripts: React.FC<ScriptsProps> = ({
 
     // ! Creating nav mesh for unit collision
     const navmeshLoader = new YUKA.NavMeshLoader();
+
     navmeshLoader.load("/NavMesh.glb").then((navigationMesh) => {
-      // !navMesh + graph creation
-      const navMesh = navigationMesh;
-      const graph = navMesh.graph;
-      let graphHelper = createGraphHelper(graph, 0.2);
-      let navMeshGroup = createConvexRegionHelper(navMesh);
-      scene.add(graphHelper);
-      scene.add(navMeshGroup);
+      setNavMesh(navigationMesh); // ✅ correctly use the passed prop
+
+      const graph = navigationMesh.graph;
+      const graphHelper = createGraphHelper(graph, 0.2);
+      const navMeshGroup = createConvexRegionHelper(navigationMesh);
+      scene.add(graphHelper, navMeshGroup);
       graphHelper.visible = false;
       navMeshGroup.visible = false;
 
-      // ! Create Checkpoints
       const pointA = new THREE.Vector3(-3, 0.2, 3);
       const pointB = new THREE.Vector3(-3, 0.2, -3);
       const pointC = new THREE.Vector3(0, 0.2, 0);
       const pointD = new THREE.Vector3(7, 1.2, 3);
       const pointE = new THREE.Vector3(7, 1.2, -3);
-      //const pointF = new THREE.Vector3(0, 0.2, -1);
 
       const labelMap = new Map<string, string>();
       labelMap.set(pointA.toArray().join(","), "Assembly");
@@ -123,16 +122,9 @@ export const Scripts: React.FC<ScriptsProps> = ({
       labelMap.set(pointD.toArray().join(","), "Conveyor Belt");
       labelMap.set(pointE.toArray().join(","), "Testing");
 
-      function getLabelFromVector(v: THREE.Vector3): string {
-        return (
-          labelMap.get(v.toArray().join(",")) ||
-          `(${v.x.toFixed(1)}, ${v.y.toFixed(1)}, ${v.z.toFixed(1)})`
-        );
-      }
-
       // ! Setup Vehicle Tracking and Generate robots dynamically
       const robotArray: CollisionVehicle[] = [];
-      const robotState: Map<number, string> = new Map();
+      const robotState = new Map<number, string>();
       const robotColor = new Map<number, string>();
       const robotCount = 5;
 
@@ -144,7 +136,7 @@ export const Scripts: React.FC<ScriptsProps> = ({
           Math.random(),
           Math.random()
         );
-        const hexColor = `#${color.getHexString()}`; // Convert to hex string
+        const hexColor = `#${color.getHexString()}`;
 
         vehicleMeshClone.traverse((child) => {
           if ((child as THREE.Mesh).isMesh) {
@@ -154,12 +146,12 @@ export const Scripts: React.FC<ScriptsProps> = ({
           }
         });
 
-        robotColor.set(i, hexColor); // Save for use in labels
+        robotColor.set(i, hexColor);
 
         scene.add(vehicleMeshClone);
-        const robot = new CollisionVehicle(navMesh, i);
+        const robot = new CollisionVehicle(navigationMesh, i); // ✅ updated from navMesh
         robot.setRenderComponent(vehicleMeshClone, sync);
-        // spawn in by defining the bounds of the rectangle
+
         const minX = 0,
           maxX = 3;
         const minZ = -3,
@@ -171,10 +163,13 @@ export const Scripts: React.FC<ScriptsProps> = ({
         const individualPath = new YUKA.FollowPathBehavior();
         individualPath.active = false;
         robot.steering.add(individualPath);
+
         entityManager.add(robot);
         robotArray.push(robot);
         robotState.set(i, "Walk");
       }
+
+      setRobotArray(robotArray);
 
       // ! Speed Buttons and States
       // Create title for speed buttons
@@ -202,6 +197,8 @@ export const Scripts: React.FC<ScriptsProps> = ({
         speedButtonsContainer.appendChild(button);
 
         button.addEventListener("click", () => {
+          const updatedState = new Map(robotState);
+
           for (const id of selectedRobots) {
             const robot = robotArray[id];
             if (!robot) continue;
@@ -237,93 +234,12 @@ export const Scripts: React.FC<ScriptsProps> = ({
               robot.maxSpeed = 3;
             }
 
-            robotState.set(id, state);
+            updatedState.set(id, state);
           }
 
-          setRobotState(new Map(robotState)); // Needed to trigger UI update
+          setRobotState(updatedState);
         });
       });
-
-      // ! Start instructions button:
-      // Create title for speed buttons
-      const startTitle = document.createElement("p");
-      startTitle.textContent = "4. Press Start";
-      startTitle.style.position = "absolute";
-      startTitle.style.top = "340px";
-      startTitle.style.left = "180px";
-      startTitle.style.margin = "0";
-      startTitle.style.fontFamily = "Arial, sans-serif";
-      startTitle.style.fontSize = "16px";
-      document.body.appendChild(startTitle);
-
-      // button
-      const startButton = document.createElement("button");
-      startButton.textContent = "Start All Paths";
-      startButton.style.position = "absolute";
-      startButton.style.top = "370px";
-      startButton.style.left = "180px";
-      document.body.appendChild(startButton);
-
-      startButton.addEventListener("click", () => {
-        for (const [id, pathList] of robotInstruction.entries()) {
-          const robot = robotArray[id];
-          if (!robot || pathList.length === 0) continue;
-
-          const origin = robot.position;
-
-          // Create a full YUKA path
-          const yukaPath = new YUKA.Path();
-          yukaPath.add(new YUKA.Vector3(origin.x, origin.y, origin.z));
-
-          for (const point of pathList) {
-            yukaPath.add(new YUKA.Vector3(point.x, point.y, point.z));
-          }
-
-          const optimalPath = robot.steering.behaviors[0];
-          optimalPath.active = true;
-          optimalPath.path.clear();
-
-          for (let i = 0; i < yukaPath._waypoints.length - 1; i++) {
-            const from = yukaPath._waypoints[i];
-            const to = yukaPath._waypoints[i + 1];
-
-            if (
-              Math.abs(from.x - to.x) < 0.001 &&
-              Math.abs(from.y - to.y) < 0.001 &&
-              Math.abs(from.z - to.z) < 0.001
-            ) {
-              continue;
-            }
-
-            const jitteredTo = to.clone();
-            jitteredTo.x += (Math.random() - 0.5) * 1;
-            jitteredTo.z += (Math.random() - 0.5) * 1;
-
-            const segment = navMesh.findPath(from, jitteredTo);
-            for (const point of segment) {
-              optimalPath.path.add(point);
-            }
-          }
-        }
-
-        // ✅ Clear and update state to trigger UI update
-        robotInstruction.clear();
-        recentlyUpdatedRobots.clear();
-        setRobotInstruction(new Map(robotInstruction));
-        setRecentlyUpdatedRobots(new Set(recentlyUpdatedRobots));
-      });
-
-      // ! Create Checkboxes for Robots
-      // Create checkboxes to generate grouping instructions
-
-      // const robotCheckboxMap = new Map<number, HTMLInputElement>();
-
-      // Generate checkboxes for each robot
-      // for (let i = 0; i < robotCount; i++) {
-      //   createCheckboxForRobot(i);
-      // }
-
-      //
 
       // ! Create waypoints
       function addMarkerAt(position: THREE.Vector3, color: string) {

@@ -1,13 +1,19 @@
 import { useState } from "react";
 import * as THREE from "three";
+import * as YUKA from "yuka";
 import "./App.css";
 import RobotUIPanel from "./components/RobotUIPanel";
 import RobotSelector from "./components/RobotSelector";
 import { Scripts } from "./components/scripts";
 import NavButtons from "./components/NavButtons";
+import StartPathsButton from "./components/StartPathsButton";
+import { CollisionVehicle } from "./types/collisionVehicle";
 
 function App() {
   const robotCount = 5;
+  // Global simulation state
+  const [navMesh, setNavMesh] = useState<YUKA.NavMesh | null>(null);
+  const [robotArray, setRobotArray] = useState<CollisionVehicle[]>([]);
 
   const [robotInstruction, setRobotInstruction] = useState<
     Map<number, THREE.Vector3[]>
@@ -56,6 +62,8 @@ function App() {
         getLabelFromVector={getLabelFromVector}
         selectedRobots={selectedRobots}
         robotColor={robotColor}
+        setNavMesh={setNavMesh}
+        setRobotArray={setRobotArray}
       />
       <RobotUIPanel
         robotInstruction={robotInstruction}
@@ -77,6 +85,16 @@ function App() {
         setRecentlyUpdatedRobots={setRecentlyUpdatedRobots}
         selectedRobots={selectedRobots}
       />
+      {navMesh && (
+        <StartPathsButton
+          robotInstruction={robotInstruction}
+          setRobotInstruction={setRobotInstruction}
+          recentlyUpdatedRobots={recentlyUpdatedRobots}
+          setRecentlyUpdatedRobots={setRecentlyUpdatedRobots}
+          robotArray={robotArray}
+          navMesh={navMesh}
+        />
+      )}
     </>
   );
 }
