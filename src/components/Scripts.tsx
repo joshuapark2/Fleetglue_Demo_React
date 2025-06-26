@@ -9,12 +9,37 @@ import { CollisionVehicle } from "../types/collisionVehicle";
 import { FontLoader } from "three/examples/jsm/Addons.js";
 import { TextGeometry } from "three/examples/jsm/Addons.js";
 
-export const Scripts = () => {
+interface ScriptsProps {
+  robotInstruction: Map<number, THREE.Vector3[]>;
+  setRobotInstruction: React.Dispatch<
+    React.SetStateAction<Map<number, THREE.Vector3[]>>
+  >;
+  robotState: Map<number, string>;
+  setRobotState: React.Dispatch<React.SetStateAction<Map<number, string>>>;
+  recentlyUpdatedRobots: Set<number>;
+  setRecentlyUpdatedRobots: React.Dispatch<React.SetStateAction<Set<number>>>;
+  getLabelFromVector: (v: THREE.Vector3) => string;
+
+  selectedRobots: ReadonlySet<number>;
+  robotColors: Map<number, string>;
+}
+
+export const Scripts: React.FC<ScriptsProps> = ({
+  robotInstruction,
+  setRobotInstruction,
+  robotState,
+  setRobotState,
+  recentlyUpdatedRobots,
+  setRecentlyUpdatedRobots,
+  getLabelFromVector,
+  selectedRobots,
+  robotColors,
+}) => {
   const mountRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const width = window.innerWidth;
-    const height = window.innerHeight;
+    const width = window.innerWidth - 400;
+    const height = window.innerHeight - 400;
 
     // Renderer - JS API for rendering interactive 3D Graphics on web browser
     const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -89,11 +114,7 @@ export const Scripts = () => {
       const pointC = new THREE.Vector3(0, 0.2, 0);
       const pointD = new THREE.Vector3(7, 1.2, 3);
       const pointE = new THREE.Vector3(7, 1.2, -3);
-      const pointF = new THREE.Vector3(0, 0.2, -1);
-      // 0, 0.2, -3
-      // 3, 0.2, -3
-      // 3, 0.2, -1
-      // 0, 0.2, -1
+      //const pointF = new THREE.Vector3(0, 0.2, -1);
 
       const labelMap = new Map<string, string>();
       labelMap.set(pointA.toArray().join(","), "Assembly");
@@ -189,8 +210,10 @@ export const Scripts = () => {
               robot.maxSpeed = 0.7;
               robot.steering.behaviors[0].active = false;
               robotInstruction.delete(id);
+              setRobotInstruction(new Map(robotInstruction));
+              setRecentlyUpdatedRobots(new Set(recentlyUpdatedRobots));
 
-              // Create and show alert
+              // Alert
               const alertBox = document.createElement("div");
               alertBox.textContent = `Removed Robot ${
                 id + 1
@@ -206,21 +229,18 @@ export const Scripts = () => {
               alertBox.style.borderRadius = "4px";
               alertBox.style.zIndex = "1000";
               alertBox.style.fontFamily = "Arial, sans-serif";
-
               document.body.appendChild(alertBox);
-
-              // Remove after 5 seconds
-              setTimeout(() => {
-                alertBox.remove();
-              }, 5000);
+              setTimeout(() => alertBox.remove(), 5000);
             } else if (state === "Walk") {
               robot.maxSpeed = 1.5;
             } else if (state === "Run") {
               robot.maxSpeed = 3;
             }
+
             robotState.set(id, state);
           }
-          updateUIPanel();
+
+          setRobotState(new Map(robotState)); // Needed to trigger UI update
         });
       });
 
@@ -235,6 +255,7 @@ export const Scripts = () => {
       startTitle.style.fontFamily = "Arial, sans-serif";
       startTitle.style.fontSize = "16px";
       document.body.appendChild(startTitle);
+
       // button
       const startButton = document.createElement("button");
       startButton.textContent = "Start All Paths";
@@ -242,10 +263,6 @@ export const Scripts = () => {
       startButton.style.top = "370px";
       startButton.style.left = "180px";
       document.body.appendChild(startButton);
-
-      // Generate instructions of waypoints of each robot
-      const robotInstruction: Map<number, THREE.Vector3[]> = new Map();
-      // contains id and target
 
       startButton.addEventListener("click", () => {
         for (const [id, pathList] of robotInstruction.entries()) {
@@ -256,10 +273,10 @@ export const Scripts = () => {
 
           // Create a full YUKA path
           const yukaPath = new YUKA.Path();
-
           yukaPath.add(new YUKA.Vector3(origin.x, origin.y, origin.z));
+
           for (const point of pathList) {
-            yukaPath.add(new YUKA.Vector3(point.x, point.y, point.z)); // turn THREE into YUKA Vector3
+            yukaPath.add(new YUKA.Vector3(point.x, point.y, point.z));
           }
 
           const optimalPath = robot.steering.behaviors[0];
@@ -278,196 +295,35 @@ export const Scripts = () => {
               continue;
             }
 
-            const jitteredTo = to.clone(); // purpose is to avoid entities to be directly on top of each other
-            jitteredTo.x += (Math.random() - 0.5) * 1; // ±0.25 units
+            const jitteredTo = to.clone();
+            jitteredTo.x += (Math.random() - 0.5) * 1;
             jitteredTo.z += (Math.random() - 0.5) * 1;
 
             const segment = navMesh.findPath(from, jitteredTo);
-
             for (const point of segment) {
               optimalPath.path.add(point);
             }
           }
         }
+
+        // ✅ Clear and update state to trigger UI update
         robotInstruction.clear();
         recentlyUpdatedRobots.clear();
-        updateUIPanel(); // reflect cleared instructions
+        setRobotInstruction(new Map(robotInstruction));
+        setRecentlyUpdatedRobots(new Set(recentlyUpdatedRobots));
       });
-
-      // ! UI Panel:
-      const uiPanel = document.createElement("div");
-      uiPanel.style.position = "absolute";
-      uiPanel.style.right = "20px";
-      uiPanel.style.top = "20px";
-      uiPanel.style.width = "250px";
-      uiPanel.style.maxHeight = "800px";
-      uiPanel.style.overflowY = "auto";
-      uiPanel.style.backgroundColor = "#f0f0f0";
-      uiPanel.style.border = "1px solid #ccc";
-      uiPanel.style.padding = "10px";
-      uiPanel.style.fontFamily = "Arial, sans-serif";
-      uiPanel.style.fontSize = "14px";
-      document.body.appendChild(uiPanel);
-      updateUIPanel();
-
-      // ! Update UI on Right
-      function updateUIPanel() {
-        uiPanel.innerHTML = "<h3>Robot Instructions</h3>";
-
-        if (robotInstruction.size === 0) {
-          uiPanel.innerHTML += "<p>No instructions assigned.</p>";
-        }
-
-        for (const [id, waypoints] of robotInstruction.entries()) {
-          const container = document.createElement("div");
-          container.style.marginBottom = "1em";
-
-          const header = document.createElement("h4");
-          header.textContent = `Robot ${id + 1} (${robotState.get(id)})`;
-          header.style.marginLeft = "10px";
-          if (recentlyUpdatedRobots.has(id)) {
-            header.style.backgroundColor = "#f1c40f";
-          }
-
-          const clearBtn = document.createElement("button");
-          clearBtn.textContent = "Clear";
-          clearBtn.style.marginLeft = "10px";
-          clearBtn.addEventListener("click", () => {
-            robotInstruction.delete(id);
-            updateUIPanel();
-          });
-
-          const list = document.createElement("ul");
-          waypoints.forEach((point) => {
-            const item = document.createElement("li");
-            item.textContent = getLabelFromVector(point);
-            list.appendChild(item);
-          });
-
-          container.appendChild(header);
-          container.appendChild(clearBtn);
-          container.appendChild(list);
-          uiPanel.appendChild(container);
-        }
-      }
-
-      const recentlyUpdatedRobots = new Set<number>();
-
-      // ! Helper to create a button
-      function createNavButton(
-        label: string,
-        position: { top: number; left: number },
-        target: THREE.Vector3
-      ) {
-        const button = document.createElement("button");
-        button.textContent = label;
-        button.style.position = "absolute";
-        button.style.top = `${position.top}px`;
-        button.style.left = `${position.left}px`;
-        document.body.appendChild(button);
-
-        button.addEventListener("click", () => {
-          for (const id of selectedRobots) {
-            if (!robotInstruction.has(id)) {
-              robotInstruction.set(id, []);
-            }
-            robotInstruction.get(id)!.push(target);
-            recentlyUpdatedRobots.add(id);
-          }
-
-          updateUIPanel();
-        });
-      }
-      // ! Create buttons
-      // Create section title for instructions
-      const instructionTitle = document.createElement("p");
-      instructionTitle.textContent = "2. Select Instructions";
-      instructionTitle.style.position = "absolute";
-      instructionTitle.style.top = "40px";
-      instructionTitle.style.left = "180px";
-      instructionTitle.style.margin = "0";
-      instructionTitle.style.fontFamily = "Arial, sans-serif";
-      instructionTitle.style.fontSize = "16px";
-      document.body.appendChild(instructionTitle);
-
-      // Create navigation / instructions buttons
-      createNavButton("Go to Assembly", { top: 70, left: 180 }, pointA);
-      createNavButton("Go to Packaging", { top: 110, left: 180 }, pointB);
-      createNavButton("Go to Storage", { top: 150, left: 180 }, pointC);
-      createNavButton("Go to Conveyor Belt", { top: 190, left: 180 }, pointD);
-      createNavButton("Go to Testing", { top: 230, left: 180 }, pointE);
-
-      //createNavButton("Go to Point F", { top: 270, left: 180 }, pointF);
 
       // ! Create Checkboxes for Robots
       // Create checkboxes to generate grouping instructions
-      const selectedRobots = new Set<number>();
-      const robotCheckboxMap = new Map<number, HTMLInputElement>();
+
+      // const robotCheckboxMap = new Map<number, HTMLInputElement>();
 
       // Generate checkboxes for each robot
-      for (let i = 0; i < robotCount; i++) {
-        createCheckboxForRobot(i);
-      }
+      // for (let i = 0; i < robotCount; i++) {
+      //   createCheckboxForRobot(i);
+      // }
 
-      // Create section title for robot selection
-      const robotTitle = document.createElement("p");
-      robotTitle.textContent = "1. Select Robot(s)";
-      robotTitle.style.position = "absolute";
-      robotTitle.style.top = "40px";
-      robotTitle.style.left = "20px";
-      robotTitle.style.margin = "0";
-      robotTitle.style.fontFamily = "Arial, sans-serif";
-      robotTitle.style.fontSize = "16px";
-      document.body.appendChild(robotTitle);
-
-      function createCheckboxForRobot(id: number) {
-        const checkbox = document.createElement("input");
-        checkbox.type = "checkbox";
-        checkbox.id = `robot-${id}`;
-        checkbox.style.position = "absolute";
-        checkbox.style.top = `${70 + id * 30}px`;
-        checkbox.style.left = "20px";
-
-        const label = document.createElement("label");
-        label.htmlFor = checkbox.id;
-        label.innerText = `Robot ${id + 1}`;
-        //label.style.backgroundColor = "#292828";
-        label.style.position = "absolute";
-        label.style.top = `${70 + id * 30}px`;
-        label.style.left = "50px";
-
-        // Use stored robot color for the label
-        const robotColors = robotColor.get(id);
-        if (robotColors) label.style.color = robotColors;
-
-        checkbox.addEventListener("change", (e) => {
-          if (checkbox.checked) {
-            selectedRobots.add(id);
-          } else {
-            selectedRobots.delete(id);
-          }
-        });
-
-        document.body.appendChild(checkbox);
-        document.body.appendChild(label);
-        robotCheckboxMap.set(id, checkbox);
-      }
-      // Reset selected checkbox
-      // Create "Reset Selection" button
-      const resetButton = document.createElement("button");
-      resetButton.textContent = "Reset Selection";
-      resetButton.style.position = "absolute";
-      resetButton.style.top = `${70 + robotArray.length * 30 + 10}px`;
-      resetButton.style.left = "20px";
-      resetButton.style.fontSize = "12px";
-      document.body.appendChild(resetButton);
-
-      resetButton.addEventListener("click", () => {
-        for (const [id, checkbox] of robotCheckboxMap.entries()) {
-          checkbox.checked = false;
-          selectedRobots.delete(id); // no need to dispatch, just update directly
-        }
-      });
+      //
 
       // ! Create waypoints
       function addMarkerAt(position: THREE.Vector3, color: string) {
@@ -484,7 +340,7 @@ export const Scripts = () => {
       addMarkerAt(pointC, "yellow");
       addMarkerAt(pointD, "green");
       addMarkerAt(pointE, "blue");
-      addMarkerAt(pointF, "purple");
+      // addMarkerAt(pointF, "purple");
 
       // Creating text
       function create3DText(
