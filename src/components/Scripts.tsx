@@ -89,7 +89,7 @@ export const Scripts = () => {
       const pointC = new THREE.Vector3(0, 0.2, 0);
       const pointD = new THREE.Vector3(7, 1.2, 3);
       const pointE = new THREE.Vector3(7, 1.2, -3);
-      const pointF = new THREE.Vector3(0, 0.2, -1);
+      // const pointF = new THREE.Vector3(0, 0.2, -1);
       // 0, 0.2, -3
       // 3, 0.2, -3
       // 3, 0.2, -1
@@ -259,16 +259,20 @@ export const Scripts = () => {
 
           yukaPath.add(new YUKA.Vector3(origin.x, origin.y, origin.z));
           for (const point of pathList) {
-            yukaPath.add(new YUKA.Vector3(point.x, point.y, point.z)); // turn THREE into YUKA Vector3
+            yukaPath.add(new YUKA.Vector3(point.x, point.y, point.z));
           }
 
-          const optimalPath = robot.steering.behaviors[0];
+          // Access private _waypoints field
+          const waypoints = (yukaPath as any)._waypoints as YUKA.Vector3[];
+
+          const optimalPath = robot.steering
+            .behaviors[0] as YUKA.FollowPathBehavior;
           optimalPath.active = true;
           optimalPath.path.clear();
 
-          for (let i = 0; i < yukaPath._waypoints.length - 1; i++) {
-            const from = yukaPath._waypoints[i];
-            const to = yukaPath._waypoints[i + 1];
+          for (let i = 0; i < waypoints.length - 1; i++) {
+            const from = waypoints[i];
+            const to = waypoints[i + 1];
 
             if (
               Math.abs(from.x - to.x) < 0.001 &&
@@ -278,8 +282,8 @@ export const Scripts = () => {
               continue;
             }
 
-            const jitteredTo = to.clone(); // purpose is to avoid entities to be directly on top of each other
-            jitteredTo.x += (Math.random() - 0.5) * 1; // ±0.25 units
+            const jitteredTo = to.clone();
+            jitteredTo.x += (Math.random() - 0.5) * 1;
             jitteredTo.z += (Math.random() - 0.5) * 1;
 
             const segment = navMesh.findPath(from, jitteredTo);
@@ -440,7 +444,7 @@ export const Scripts = () => {
         const robotColors = robotColor.get(id);
         if (robotColors) label.style.color = robotColors;
 
-        checkbox.addEventListener("change", (e) => {
+        checkbox.addEventListener("change", () => {
           if (checkbox.checked) {
             selectedRobots.add(id);
           } else {
@@ -535,6 +539,7 @@ export const Scripts = () => {
       renderer.render(scene, camera);
     };
     renderer.setAnimationLoop(animate);
+    controls.update();
 
     return () => {
       renderer.dispose();
